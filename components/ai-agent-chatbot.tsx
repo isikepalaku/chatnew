@@ -100,19 +100,19 @@ export default function AIAgentChatbot() {
   
       // Kirim permintaan ke API proxy di Next.js
       const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          question: inputMessage,
-          history: history,
-          overrideConfig: {
-            sessionId: sessionId,
-            returnSourceDocuments: true
-          }
-        })
-      });
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    question: inputMessage,
+    history: history,
+    overrideConfig: {
+      sessionId: sessionId,
+      returnSourceDocuments: true
+    }
+  })
+});
   
       if (!response.ok) {
         throw new Error('Network response was not ok');
