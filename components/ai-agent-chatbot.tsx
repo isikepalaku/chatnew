@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { SendIcon, MenuIcon, HomeIcon, MessageCircleIcon, SettingsIcon, LogOutIcon } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { Session, AuthChangeEvent } from '@supabase/supabase-js'
+import { Session, AuthChangeEvent, User } from '@supabase/supabase-js'
 import { Auth } from '@supabase/auth-ui-react'
 import { ThemeSupa } from '@supabase/auth-ui-shared'
 import { useRouter } from 'next/navigation'
@@ -30,7 +30,7 @@ export default function AIAgentChatbot() {
   const [inputMessage, setInputMessage] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null) 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const supabase = createClientComponentClient()
