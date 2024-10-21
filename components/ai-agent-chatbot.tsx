@@ -25,16 +25,43 @@ const exampleConversations = [
   { title: "Creative Writing", id: "creative-writing" },
 ]
 
+// Komponen untuk autentikasi, hanya dirender di client-side
+const AuthComponent = () => {
+  const supabase = createClientComponentClient()
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-900 text-gray-100">
+      <div className="w-full max-w-md p-8 space-y-8 bg-gray-800 rounded-lg shadow-md">
+        <h2 className="text-2xl font-bold text-center">Sign In to AI Agent Chatbot</h2>
+        <Auth
+          supabaseClient={supabase}
+          appearance={{ theme: ThemeSupa }}
+          theme="dark"
+          providers={['google', 'github']}
+          redirectTo={`${origin}/auth/callback`}
+        />
+      </div>
+    </div>
+  )
+}
+
 export default function AIAgentChatbot() {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [user, setUser] = useState<User | null>(null)
-  const [sessionId, setSessionId] = useState<string | null>(null) 
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [isClient, setIsClient] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const supabase = createClientComponentClient()
   const router = useRouter()
+
+  // Mengecek apakah komponen berada di client-side
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   useEffect(() => {
     const getUser = async () => {
@@ -42,8 +69,7 @@ export default function AIAgentChatbot() {
       setUser(user)
 
       if (user) {
-        // Buat sessionId berdasarkan user ID dari Supabase
-        const newSessionId = `${user.id}-${uuidv4()}`;
+        const newSessionId = `${user.id}-${uuidv4()}`
         setSessionId(newSessionId)
       }
     }
@@ -52,7 +78,7 @@ export default function AIAgentChatbot() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       setUser(session?.user ?? null)
       if (session?.user) {
-        const newSessionId = `${session.user.id}-${uuidv4()}`;
+        const newSessionId = `${session.user.id}-${uuidv4()}`
         setSessionId(newSessionId)
       } else {
         setSessionId(null)
@@ -81,23 +107,20 @@ export default function AIAgentChatbot() {
       console.error('Session ID is missing');
       return;
     }
-  
-    // Tambahkan pesan baru dari pengguna ke dalam state
+
     const newUserMessage: Message = { text: inputMessage, sender: 'user' };
     const updatedMessages = [...messages, newUserMessage];
-  
+
     setMessages(updatedMessages);
     setInputMessage('');
     setIsTyping(true);
-  
+
     try {
-      // Buat history sesuai dengan format yang diterima API
       const history = updatedMessages.map((msg) => ({
         role: msg.sender === 'user' ? 'userMessage' : 'apiMessage',
         content: msg.text
       }));
-  
-      // Kirim permintaan ke API proxy di Next.js
+
       const response = await fetch('/api/proxy', {
         method: 'POST',
         headers: {
@@ -112,11 +135,11 @@ export default function AIAgentChatbot() {
           }
         })
       });
-  
+
       if (!response.ok) {
         throw new Error('Network response was not ok');
       }
-  
+
       const { reply } = await response.json();
       const botResponse: Message = { text: reply, sender: 'bot' };
       setMessages((prevMessages) => [...prevMessages, botResponse]);
@@ -127,48 +150,31 @@ export default function AIAgentChatbot() {
     } finally {
       setIsTyping(false);
     }
-  };    
+  };
+
+  // Jika bukan client-side, return null atau spinner
+  if (!isClient) {
+    return null;
+  }
 
   if (!user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900 text-gray-100">
-        <div className="w-full max-w-md p-8 space-y-8 bg-gray-800 rounded-lg shadow-md">
-          <h2 className="text-2xl font-bold text-center">Sign In to AI Agent Chatbot</h2>
-          <Auth
-            supabaseClient={supabase}
-            appearance={{ theme: ThemeSupa }}
-            theme="dark"
-            providers={['google', 'github']}
-            redirectTo={`${window.location.origin}/auth/callback`}
-          />
-        </div>
-      </div>
-    )
+    return <AuthComponent />
   }
 
   return (
     <div className="flex h-screen bg-gray-900 text-gray-100">
-      {/* Sidebar */}
       <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-gray-800 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0`}>
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between h-16 bg-gray-900 px-4">
             <h2 className="text-xl font-bold">Conversations</h2>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsSidebarOpen(false)}
-              className="lg:hidden"
-            >
+            <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(false)} className="lg:hidden">
               <MenuIcon className="h-6 w-6" />
               <span className="sr-only">Close sidebar</span>
             </Button>
           </div>
           <ScrollArea className="flex-1">
             {exampleConversations.map((conv) => (
-              <button
-                key={conv.id}
-                className="w-full text-left px-4 py-2 hover:bg-gray-700 focus:outline-none focus:bg-gray-700"
-              >
+              <button key={conv.id} className="w-full text-left px-4 py-2 hover:bg-gray-700 focus:outline-none focus:bg-gray-700">
                 {conv.title}
               </button>
             ))}
@@ -176,16 +182,10 @@ export default function AIAgentChatbot() {
         </div>
       </div>
 
-      {/* Main content */}
       <div className="flex flex-col flex-1">
         <header className="flex items-center justify-between px-4 h-16 bg-gray-800 shadow-md">
           <div className="flex items-center space-x-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsSidebarOpen(true)}
-              className="lg:hidden"
-            >
+            <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(true)} className="lg:hidden">
               <MenuIcon className="h-6 w-6" />
               <span className="sr-only">Open sidebar</span>
             </Button>
@@ -211,41 +211,22 @@ export default function AIAgentChatbot() {
 
         <ScrollArea className="flex-grow p-4">
           {messages.map((message, index) => (
-            <div
-              key={index}
-              className={`mb-4 ${message.sender === 'user' ? 'text-right' : 'text-left'}`}
-            >
-              <span
-                className={`inline-block p-2 rounded-lg ${
-                  message.sender === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100'
-                }`}
-              >
-                {message.sender === 'bot' ? (
-                  <ReactMarkdown>{message.text}</ReactMarkdown>
-                ) : (
-                  message.text
-                )}
+            <div key={index} className={`mb-4 ${message.sender === 'user' ? 'text-right' : 'text-left'}`}>
+              <span className={`inline-block p-2 rounded-lg ${message.sender === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100'}`}>
+                {message.sender === 'bot' ? <ReactMarkdown>{message.text}</ReactMarkdown> : message.text}
               </span>
             </div>
           ))}
           {isTyping && (
             <div className="text-left mb-4">
-              <span className="inline-block p-2 rounded-lg bg-gray-700 text-gray-100">
-                Typing...
-              </span>
+              <span className="inline-block p-2 rounded-lg bg-gray-700 text-gray-100">Typing...</span>
             </div>
           )}
           <div ref={messagesEndRef} />
         </ScrollArea>
 
         <div className="p-4 border-t border-gray-700">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              handleSendMessage()
-            }}
-            className="flex space-x-2"
-          >
+          <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="flex space-x-2">
             <Input
               type="text"
               placeholder="Type your message..."
