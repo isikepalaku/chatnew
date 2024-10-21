@@ -1,19 +1,38 @@
+// app/api/proxy/route.ts
 import { NextResponse } from 'next/server';
+
+interface PredictionResponse {
+  text: string;
+  // Add other expected response fields
+}
 
 export async function POST(request: Request) {
   try {
-    // Ekstrak question, history, dan overrideConfig dari request body
+    // Extract data from request body
     const { question, history, overrideConfig } = await request.json();
-    const apiEndpoint = `${process.env.NEXT_PUBLIC_API_ENDPOINT}/c31ac883-a580-43ad-ada0-198cb2202b6b`;
-    const apiToken = process.env.NEXT_PUBLIC_API_TOKEN;
 
-    // Pastikan sessionId ada dalam overrideConfig
-    if (!overrideConfig?.sessionId) {
-      console.error('Session ID is missing');
-      return NextResponse.json({ reply: 'Session ID is required.' }, { status: 400 });
+    // Get environment variables
+    const apiEndpoint = process.env.ZEP_API_ENDPOINT;
+    const apiToken = process.env.ZEP_API_TOKEN;
+
+    // Validate environment variables
+    if (!apiEndpoint || !apiToken) {
+      console.error('Missing API configuration:', { apiEndpoint: !!apiEndpoint, apiToken: !!apiToken });
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      );
     }
 
-    // Kirim permintaan ke API Zep Memory Cloud
+    // Log request for debugging
+    console.log('Sending request to API:', {
+      endpoint: apiEndpoint,
+      questionLength: question?.length,
+      historyLength: history?.length,
+      sessionId: overrideConfig?.sessionId
+    });
+
+    // Make request to prediction API
     const response = await fetch(apiEndpoint, {
       method: 'POST',
       headers: {
@@ -22,23 +41,64 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         question,
-        history, // Sertakan history dalam body permintaan
+        history,
         overrideConfig: {
-          sessionId: overrideConfig.sessionId, // Sertakan sessionId
-          returnSourceDocuments: overrideConfig.returnSourceDocuments || false,
+          sessionId: overrideConfig?.sessionId,
+          returnSourceDocuments: overrideConfig?.returnSourceDocuments || false,
         },
       }),
     });
 
+    // Log response status for debugging
+    console.log('API response status:', response.status);
+
     if (!response.ok) {
-      console.error('API error:', response.status, await response.text());
-      return NextResponse.json({ reply: 'Error communicating with Zep Memory Cloud API' }, { status: 500 });
+      const errorText = await response.text();
+      console.error('API error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText
+      });
+
+      return NextResponse.json(
+        { 
+          error: 'Error from prediction API',
+          details: errorText
+        },
+        { status: response.status }
+      );
     }
 
     const data = await response.json();
-    return NextResponse.json({ reply: data.text || "No response from API" });
+    
+    // Log successful response for debugging
+    console.log('API response data structure:', Object.keys(data));
+
+    // Check if the response has the expected structure
+    if (!data.text && !data.reply) {
+      console.error('Invalid API response format:', data);
+      return NextResponse.json(
+        { error: 'Invalid response format from API' },
+        { status: 500 }
+      );
+    }
+
+    // Return the response text
+    return NextResponse.json({
+      reply: data.text || data.reply
+    });
+
   } catch (error) {
-    console.error('Error in API route:', error);
-    return NextResponse.json({ reply: 'An unexpected error occurred.' }, { status: 500 });
+    // Enhanced error logging
+    console.error('Detailed error information:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      type: error instanceof Error ? error.constructor.name : typeof error
+    });
+
+    return NextResponse.json(
+      { error: 'An unexpected error occurred' },
+      { status: 500 }
+    );
   }
 }
