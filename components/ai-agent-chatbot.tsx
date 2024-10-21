@@ -102,55 +102,66 @@ export default function AIAgentChatbot() {
   }
 
   const handleSendMessage = async () => {
-    if (inputMessage.trim() === '') return;
-    if (!sessionId) {
-      console.error('Session ID is missing');
-      return;
+  if (inputMessage.trim() === '') return;
+  if (!sessionId) {
+    console.error('Session ID is missing');
+    return;
+  }
+
+  const newUserMessage: Message = { text: inputMessage, sender: 'user' };
+  const updatedMessages = [...messages, newUserMessage];
+
+  setMessages(updatedMessages);
+  setInputMessage('');
+  setIsTyping(true);
+
+  try {
+    const history = updatedMessages.map((msg) => ({
+      role: msg.sender === 'user' ? 'userMessage' : 'apiMessage',
+      content: msg.text
+    }));
+
+    const response = await fetch('/api/proxy', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        question: inputMessage,
+        history: history,
+        overrideConfig: {
+          sessionId: sessionId,
+          returnSourceDocuments: true
+        }
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('API error:', data);
+      throw new Error(data.error || 'Failed to get response from API');
     }
 
-    const newUserMessage: Message = { text: inputMessage, sender: 'user' };
-    const updatedMessages = [...messages, newUserMessage];
-
-    setMessages(updatedMessages);
-    setInputMessage('');
-    setIsTyping(true);
-
-    try {
-      const history = updatedMessages.map((msg) => ({
-        role: msg.sender === 'user' ? 'userMessage' : 'apiMessage',
-        content: msg.text
-      }));
-
-      const response = await fetch('/api/proxy', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          question: inputMessage,
-          history: history,
-          overrideConfig: {
-            sessionId: sessionId,
-            returnSourceDocuments: true
-          }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Network response was not ok');
-      }
-
-      const { reply } = await response.json();
-      const botResponse: Message = { text: reply, sender: 'bot' };
-      setMessages((prevMessages) => [...prevMessages, botResponse]);
-    } catch (error) {
-      console.error('Error:', error);
-      const errorMessage: Message = { text: 'Sorry, I encountered an error. Please try again.', sender: 'bot' };
-      setMessages((prevMessages) => [...prevMessages, errorMessage]);
-    } finally {
-      setIsTyping(false);
+    if (!data.reply) {
+      console.error('Invalid response format:', data);
+      throw new Error('Invalid response format from API');
     }
-  };
+
+    const botResponse: Message = { text: data.reply, sender: 'bot' };
+    setMessages((prevMessages) => [...prevMessages, botResponse]);
+
+  } catch (error) {
+    console.error('Error in handleSendMessage:', error);
+    const errorMessage: Message = { 
+      text: 'Sorry, I encountered an error. Please try again later.', 
+      sender: 'bot' 
+    };
+    setMessages((prevMessages) => [...prevMessages, errorMessage]);
+  } finally {
+    setIsTyping(false);
+  }
+};
 
   // Jika bukan client-side, return null atau spinner
   if (!isClient) {
