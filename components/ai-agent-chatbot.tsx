@@ -9,10 +9,18 @@ import { SendIcon, MenuIcon, HomeIcon, MessageCircleIcon, SettingsIcon, LogOutIc
 import ReactMarkdown from 'react-markdown'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Session, AuthChangeEvent } from '@supabase/supabase-js'
-import { Auth } from '@supabase/auth-ui-react'
-import { ThemeSupa } from '@supabase/auth-ui-shared'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { v4 as uuidv4 } from 'uuid'
+
+// Dynamically import Auth component with ssr disabled
+const AuthComponent = dynamic(
+  () => import('@supabase/auth-ui-react').then((mod) => mod.Auth),
+  { ssr: false }
+)
+
+// Import ThemeSupa directly
+import { ThemeSupa } from '@supabase/auth-ui-shared'
 
 type Message = {
   text: string
@@ -32,18 +40,19 @@ export default function AIAgentChatbot() {
   const [isTyping, setIsTyping] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [user, setUser] = useState<User | null>(null)
-  const [sessionId, setSessionId] = useState<string | null>(null) 
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [isClient, setIsClient] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const supabase = createClientComponentClient()
   const router = useRouter()
 
   useEffect(() => {
+    setIsClient(true)
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       setUser(user)
 
       if (user) {
-        // Buat sessionId berdasarkan user ID dari Supabase
         const newSessionId = `${user.id}-${uuidv4()}`;
         setSessionId(newSessionId)
       }
@@ -83,7 +92,6 @@ export default function AIAgentChatbot() {
       return;
     }
   
-    // Tambahkan pesan baru dari pengguna ke dalam state
     const newUserMessage: Message = { text: inputMessage, sender: 'user' };
     const updatedMessages = [...messages, newUserMessage];
   
@@ -92,27 +100,25 @@ export default function AIAgentChatbot() {
     setIsTyping(true);
   
     try {
-      // Buat history sesuai dengan format yang diterima API
       const history = updatedMessages.map((msg) => ({
         role: msg.sender === 'user' ? 'userMessage' : 'apiMessage',
         content: msg.text
       }));
   
-      // Kirim permintaan ke API proxy di Next.js
       const response = await fetch('/api/proxy', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    question: inputMessage,
-    history: history,
-    overrideConfig: {
-      sessionId: sessionId,
-      returnSourceDocuments: true
-    }
-  })
-});
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: inputMessage,
+          history: history,
+          overrideConfig: {
+            sessionId: sessionId,
+            returnSourceDocuments: true
+          }
+        })
+      });
   
       if (!response.ok) {
         throw new Error('Network response was not ok');
@@ -128,20 +134,26 @@ export default function AIAgentChatbot() {
     } finally {
       setIsTyping(false);
     }
-  };    
+  };
+
+  if (!isClient) {
+    return null; // or a loading spinner
+  }
 
   if (!user) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-900 text-gray-100">
         <div className="w-full max-w-md p-8 space-y-8 bg-gray-800 rounded-lg shadow-md">
           <h2 className="text-2xl font-bold text-center">Sign In to AI Agent Chatbot</h2>
-          <Auth
-            supabaseClient={supabase}
-            appearance={{ theme: ThemeSupa }}
-            theme="dark"
-            providers={['google', 'github']}
-            redirectTo={`${window.location.origin}/auth/callback`}
-          />
+          {typeof window !== 'undefined' && (
+            <AuthComponent
+              supabaseClient={supabase}
+              appearance={{ theme: ThemeSupa }}
+              theme="dark"
+              providers={['google', 'github']}
+              redirectTo={`${window.location.origin}/auth/callback`}
+            />
+          )}
         </div>
       </div>
     )
