@@ -1,11 +1,6 @@
 // app/api/proxy/route.ts
 import { NextResponse } from 'next/server';
 
-interface PredictionResponse {
-  text: string;
-  // Add other expected response fields
-}
-
 export async function POST(request: Request) {
   try {
     // Extract data from request body
@@ -24,13 +19,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // Log request for debugging
-    console.log('Sending request to API:', {
-      endpoint: apiEndpoint,
-      questionLength: question?.length,
-      historyLength: history?.length,
-      sessionId: overrideConfig?.sessionId
-    });
+    // Validate required fields
+    if (!question) {
+      return NextResponse.json(
+        { error: 'Question is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!overrideConfig?.sessionId) {
+      return NextResponse.json(
+        { error: 'Session ID is required' },
+        { status: 400 }
+      );
+    }
 
     // Make request to prediction API
     const response = await fetch(apiEndpoint, {
@@ -43,15 +45,13 @@ export async function POST(request: Request) {
         question,
         history,
         overrideConfig: {
-          sessionId: overrideConfig?.sessionId,
-          returnSourceDocuments: overrideConfig?.returnSourceDocuments || false,
+          sessionId: overrideConfig.sessionId,
+          returnSourceDocuments: overrideConfig.returnSourceDocuments || false,
         },
       }),
     });
 
-    // Log response status for debugging
-    console.log('API response status:', response.status);
-
+    // Handle non-OK responses
     if (!response.ok) {
       const errorText = await response.text();
       console.error('API error response:', {
@@ -61,20 +61,15 @@ export async function POST(request: Request) {
       });
 
       return NextResponse.json(
-        { 
-          error: 'Error from prediction API',
-          details: errorText
-        },
+        { error: 'Error from prediction API' },
         { status: response.status }
       );
     }
 
+    // Parse the response
     const data = await response.json();
-    
-    // Log successful response for debugging
-    console.log('API response data structure:', Object.keys(data));
 
-    // Check if the response has the expected structure
+    // Validate response data
     if (!data.text && !data.reply) {
       console.error('Invalid API response format:', data);
       return NextResponse.json(
@@ -83,17 +78,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Return the response text
+    // Return the response
     return NextResponse.json({
       reply: data.text || data.reply
     });
 
   } catch (error) {
-    // Enhanced error logging
-    console.error('Detailed error information:', {
+    // Log the error
+    console.error('Error in API route:', {
       message: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined,
-      type: error instanceof Error ? error.constructor.name : typeof error
     });
 
     return NextResponse.json(
